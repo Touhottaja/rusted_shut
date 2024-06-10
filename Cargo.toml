@@ -2,3 +2,6 @@
 name = "rusted_shut"
 version = "0.1.0"
 
+[dependencies]
+rusqlite = "0.31.0"
+
