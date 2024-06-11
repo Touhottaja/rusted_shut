@@ -93,7 +93,8 @@ fn main() -> io::Result<()> {
     // functions based on users input.
     println!("Welcome to RustedShut - a CLI based password manager");
 
-    if let Err(_) = ensure_password_database_exists() {
+    if let Err(err) = ensure_password_database_exists() {
+        println!("{}", err);
         process::exit(1);
     }
 
