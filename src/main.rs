@@ -1,6 +1,6 @@
 use std::env;
 use std::fs::OpenOptions;
-use std::io;
+use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process;
 
@@ -18,7 +18,7 @@ enum MenuOption {
 }
 
 fn ensure_password_database_exists() -> Result<PathBuf,
-                                               Box<dyn std::error::Error>> {
+                                        Box<dyn std::error::Error>> {
     // Checks if the database already exists under the user's home folder.
     // If not, creates the database (named .rusted_shut.db).
     let username = env::var("USER")
@@ -34,10 +34,10 @@ fn ensure_password_database_exists() -> Result<PathBuf,
     OpenOptions::new()
         .write(true)
         .create_new(true)
-        .open(&path)
+        .open(&db_path)
         .map_err(|e| format!("Failed to create database: {}", e))?;
 
-    let conn = Connection::open(&path)?;
+    let conn = Connection::open(&db_path)?;
     conn.execute(
         "CREATE TABLE IF NOT EXISTS passwords (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,9 +53,38 @@ fn ensure_password_database_exists() -> Result<PathBuf,
     Ok(db_path)
 }
 
-fn handle_enter_new_password() {
-    println!("EnterNewPassword selected");
-    // TODO: Implement a function to enter a new password
+fn handle_enter_new_password(db_path: PathBuf) -> Result<(),
+                                                  Box<dyn std::error::Error>> {
+    let username = match read_input("Enter the username: ") {
+        Ok(username) => username,
+        Err(err) => {
+            return Err(Box::new(err));
+        }
+    };
+
+    let password = match read_input("Enter the password: ") {
+        Ok(password) => password,
+        Err(err) => {
+            return Err(Box::new(err));
+        }
+    };
+
+    let site_or_note = match read_input("Enter a site or a note: ") {
+        Ok(username) => username,
+        Err(err) => {
+            return Err(Box::new(err));
+        }
+    };
+
+    // TODO: Encrypt details before inserting into database
+
+    let conn = Connection::open(&db_path)?;
+    conn.execute(
+        "INSERT INTO passwords (username, password, site) VALUES (?1, ?2, ?3)",
+        &[&username, &password, &site_or_note],
+    ).map_err(|e| format!("Failed to insert password: {}", e))?;
+
+    Ok(())
 }
 
 fn handle_list_passwords() {
@@ -89,6 +118,19 @@ fn print_menu_options_and_get_input() -> MenuOption {
     }
 }
 
+fn read_input(prompt: &str) -> Result<String, io::Error> {
+    let mut input = String::new();
+    print!("{}", prompt);
+    io::stdout().flush()?;
+
+    match io::stdin().read_line(&mut input) {
+        Ok(_) => {
+            Ok(input.trim().to_string())
+        }
+        Err(err) => Err(err),
+    }
+}
+
 fn main() -> io::Result<()> {
     // Main loop of the application. Prints a greeting message and calls other
     // functions based on users input.
@@ -97,7 +139,7 @@ fn main() -> io::Result<()> {
     let db_path = match ensure_password_database_exists() {
         Ok(path) => path,
         Err(err) => {
-            println!("{}", err);
+            eprintln!("{}", err);
             process::exit(1);
         }
     };
@@ -112,13 +154,17 @@ fn main() -> io::Result<()> {
 
     match menu_selection {
         MenuOption::ListPasswords => handle_list_passwords(),
-        MenuOption::EnterNewPassword => handle_enter_new_password(),
+        MenuOption::EnterNewPassword => {
+            if let Err(err) = handle_enter_new_password(db_path) {
+                eprintln!("Error inserting a new entry: {}", err);
+            }
+        }
         MenuOption::Exit => {
             process::exit(0);
         },
         _ => {
             // This case shouldn't be reached due to the loop logic
-            println!("Invalid input");
+            eprintln!("Invalid input");
         },
     }
 
