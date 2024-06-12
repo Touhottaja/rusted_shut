@@ -17,7 +17,8 @@ enum MenuOption {
     Invalid = -1
 }
 
-fn ensure_password_database_exists() -> Result<(), Box<dyn std::error::Error>> {
+fn ensure_password_database_exists() -> Result<PathBuf,
+                                               Box<dyn std::error::Error>> {
     // Checks if the database already exists under the user's home folder.
     // If not, creates the database (named .rusted_shut.db).
     let username = env::var("USER")
@@ -26,7 +27,7 @@ fn ensure_password_database_exists() -> Result<(), Box<dyn std::error::Error>> {
     let db_path = PathBuf::from(&path);
 
     if db_path.exists() {
-        return Ok(());
+        return Ok(db_path);
     }
 
     // Create the database
@@ -49,7 +50,7 @@ fn ensure_password_database_exists() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Password database initialized successfully at {}", path);
 
-    Ok(())
+    Ok(db_path)
 }
 
 fn handle_enter_new_password() {
@@ -93,10 +94,13 @@ fn main() -> io::Result<()> {
     // functions based on users input.
     println!("Welcome to RustedShut - a CLI based password manager");
 
-    if let Err(err) = ensure_password_database_exists() {
-        println!("{}", err);
-        process::exit(1);
-    }
+    let db_path = match ensure_password_database_exists() {
+        Ok(path) => path,
+        Err(err) => {
+            println!("{}", err);
+            process::exit(1);
+        }
+    };
 
     let mut menu_selection;
     loop {
