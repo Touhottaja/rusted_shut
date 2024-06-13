@@ -17,6 +17,13 @@ enum MenuOption {
     Invalid = -1
 }
 
+#[derive(Debug)]
+struct Password {
+    username: String,
+    site: String,
+    password: String,
+}
+
 fn ensure_password_database_exists() -> Result<PathBuf,
                                         Box<dyn std::error::Error>> {
     // Checks if the database already exists under the user's home folder.
@@ -35,7 +42,7 @@ fn ensure_password_database_exists() -> Result<PathBuf,
         .write(true)
         .create_new(true)
         .open(&db_path)
-        .map_err(|e| format!("Failed to create database: {}", e))?;
+        .map_err(|err| format!("Failed to create database: {}", err))?;
 
     let conn = Connection::open(&db_path)?;
     conn.execute(
@@ -46,7 +53,7 @@ fn ensure_password_database_exists() -> Result<PathBuf,
             site        BLOB
         )",
         (),
-    ).map_err(|e| format!("Failed to create database table: {}", e))?;
+    ).map_err(|err| format!("Failed to create database table: {}", err))?;
 
     println!("Password database initialized successfully at {}", path);
 
@@ -82,14 +89,40 @@ fn handle_enter_new_password(db_path: PathBuf) -> Result<(),
     conn.execute(
         "INSERT INTO passwords (username, password, site) VALUES (?1, ?2, ?3)",
         &[&username, &password, &site_or_note],
-    ).map_err(|e| format!("Failed to insert password: {}", e))?;
+    ).map_err(|err| format!("Failed to insert password: {}", err))?;
 
     Ok(())
 }
 
-fn handle_list_passwords() {
-    println!("ListPasswords selected");
-    // TODO: Implement a function to list passwords
+fn handle_list_passwords(db_path: PathBuf) -> Result<(),
+                                              Box<dyn std::error::Error>> {
+    // Lists the passwords stored in the database
+    let conn = Connection::open(&db_path)?;
+    let mut statement = conn.prepare("SELECT * FROM passwords")?;
+
+    let password_iter = statement.query_map([], |row| {
+        Ok(Password {
+            // row.get(0) returns the column id
+            username: row.get(1)?,
+            password: row.get(2)?,
+            site: row.get(3)?,
+        })
+    })?;
+
+    for result in password_iter {
+        // TODO: Decrypt the read values
+        match result {
+            Ok(result) => {
+                println!("{:?}:{:?}         {:?}",
+                         result.username,result.password, result.site);
+            },
+            Err(err) => {
+                eprintln!("Error iterating results: {}", err);
+            }
+        }
+    }
+
+    Ok(())
 }
 
 fn print_menu_options_and_get_input() -> MenuOption {
@@ -153,7 +186,11 @@ fn main() -> io::Result<()> {
     }
 
     match menu_selection {
-        MenuOption::ListPasswords => handle_list_passwords(),
+        MenuOption::ListPasswords => {
+            if let Err(err) = handle_list_passwords(db_path) {
+                eprintln!("Error fetching passwords: {}", err);
+            }
+        }
         MenuOption::EnterNewPassword => {
             if let Err(err) = handle_enter_new_password(db_path) {
                 eprintln!("Error inserting a new entry: {}", err);
